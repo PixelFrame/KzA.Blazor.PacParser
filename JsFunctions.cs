@@ -15,10 +15,17 @@ namespace KzA.Blazor.PacParser
         public IPAddress MyIpAddress = IPAddress.Loopback;
 
         private readonly JsDohResolver _resolver;
+        private readonly HostsResolver _hostsResolver = new();
 
         public JsFunctions(JsDohResolver resolver)
         {
             _resolver = resolver;
+        }
+
+        public void SetHosts(IEnumerable<string> hosts)
+        {
+            _hostsResolver.Clear();
+            _hostsResolver.AddHostsFromStandardHosts(hosts);
         }
 
         public void ClearDebug() { debugOutput.Clear(); }
@@ -67,13 +74,19 @@ namespace KzA.Blazor.PacParser
         [JSInvokable("isResolvable")]
         public bool isResolvable(string host)
         {
+            var hostAddr = _hostsResolver.GetIPAddress(host);
+            if (hostAddr != null)
+            {
+                debugOutput.AppendLine($"[INFO] isResolvable(host:{host}) => {true} (From hosts)");
+                return true;
+            }
             var result = _resolver.DohResolveA(host);
             if (result.StartsWith("F:"))
             {
                 debugOutput.AppendLine($"[INFO] isResolvable(host:{host}) => {false}");
                 return false;
             }
-            debugOutput.AppendLine($"[INFO] isResolvable(host:{host}) => {true}");
+            debugOutput.AppendLine($"[INFO] isResolvable(host:{host}) => {true} (From public DNS)");
             return true;
 
         }
@@ -87,17 +100,21 @@ namespace KzA.Blazor.PacParser
 
             if (!IPAddress.TryParse(host, out var hostAddr))
             {
-                var dnsRes = _resolver.DohResolveA(host);
-                if (dnsRes.StartsWith("F:"))
+                hostAddr = _hostsResolver.GetIPAddress(host);
+                if (hostAddr == null) // Not found in hosts
                 {
-                    debugOutput.AppendLine($"[WARNING] isInNet(host:{host}, pattern:{pattern}, mask:{mask}) => Host {host} name resolution failed");
-                    debugOutput.AppendLine($"[INFO] isInNet(host:{host}, pattern:{pattern}, mask:{mask}) => False");
-                    return false;
-                }
-                else
-                {
-                    dnsRes = dnsRes[2..].Split(';').First();
-                    hostAddr = IPAddress.Parse(dnsRes);
+                    var dnsRes = _resolver.DohResolveA(host);
+                    if (dnsRes.StartsWith("F:")) // Not found in public DNS
+                    {
+                        debugOutput.AppendLine($"[WARNING] isInNet(host:{host}, pattern:{pattern}, mask:{mask}) => Host {host} name resolution failed");
+                        debugOutput.AppendLine($"[INFO] isInNet(host:{host}, pattern:{pattern}, mask:{mask}) => False");
+                        return false;
+                    }
+                    else // Found in public DNS
+                    {
+                        dnsRes = dnsRes[2..].Split(';').First();
+                        hostAddr = IPAddress.Parse(dnsRes);
+                    }
                 }
             }
             if (hostAddr.AddressFamily != addrFamily)
@@ -115,6 +132,12 @@ namespace KzA.Blazor.PacParser
         [JSInvokable("dnsResolve")]
         public string dnsResolve(string host)
         {
+            var hostAddr = _hostsResolver.GetIPAddress(host);
+            if (hostAddr != null)
+            {
+                debugOutput.AppendLine($"[INFO] dnsResolve(host:{host}) => {hostAddr} (From hosts)");
+                return hostAddr.ToString();
+            }
             try
             {
                 var result = _resolver.DohResolveA(host);
@@ -123,7 +146,7 @@ namespace KzA.Blazor.PacParser
                     throw new Exception(result);
                 }
                 result = result[2..].Split(';').First();
-                debugOutput.AppendLine($"[INFO] dnsResolve(host:{host}) => {result}");
+                debugOutput.AppendLine($"[INFO] dnsResolve(host:{host}) => {result} (From public DNS)");
                 return result;
             }
             catch (Exception e)

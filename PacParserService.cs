@@ -20,11 +20,12 @@ namespace KzA.Blazor.PacParser
             runtime.InvokeVoid("initializePacWorker", dotNetReference);
         }
 
-        public void Parse(string PAC, string Url, string Host, IPAddress MyIpAddress)
+        public void Parse(string PAC, string Url, string Host, IPAddress MyIpAddress, IEnumerable<string>? Hosts = null)
         {
             jsFunctions.ClearConsole();
             jsFunctions.ClearDebug();
             jsFunctions.MyIpAddress = MyIpAddress;
+            if (Hosts != null) jsFunctions.SetHosts(Hosts);
             runtime.InvokeVoid("executePac", PAC, Url, Host);
         }
     }
