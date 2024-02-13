@@ -31,7 +31,7 @@ dohResolveA = function (name) {
         },
     }
     try {
-        let response = fetch(`https://cloudflare-dns.com/dns-query?name=${name}&type=A`, options);
+        let response = fetch(`https://1.1.1.1/dns-query?name=${name}&type=A`, options);
         let responseJson = response.json();
         if (responseJson.Status != 0) {
             return `F:DnsFailure:${responseJson.Status}`;
